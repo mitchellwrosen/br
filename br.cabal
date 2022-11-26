@@ -24,32 +24,14 @@ source-repository head
 
 library
   build-depends:
-    base ^>= 4.15 || ^>= 4.16 || ^>= 4.17,
+    base ^>= 4.16 || ^>= 4.17,
+    mtl ^>= 2.3,
   default-extensions:
-    AllowAmbiguousTypes
-    BangPatterns
     BlockArguments
-    ConstraintKinds
-    DeriveAnyClass
-    DeriveDataTypeable
-    DeriveFunctor
-    DeriveGeneric
     DerivingStrategies
-    DuplicateRecordFields
-    ExistentialQuantification
-    GeneralizedNewtypeDeriving
-    InstanceSigs
     LambdaCase
-    NamedFieldPuns
-    NumericUnderscores
-    PartialTypeSignatures
-    PatternSynonyms
-    RankNTypes
-    RoleAnnotations
-    ScopedTypeVariables
-    TypeApplications
-    ViewPatterns
-  default-language: Haskell2010
+    ImplicitParams
+  default-language: GHC2021
   ghc-options:
     -Weverything
     -Wno-all-missed-specialisations
