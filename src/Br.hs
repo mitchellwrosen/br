@@ -1,8 +1,9 @@
 module Br
   ( M,
     run,
-    Goto,
+    Label,
     label,
+    goto,
     Abort,
     stick,
     abort,
@@ -50,32 +51,33 @@ run :: r -> M r a -> IO a
 run r m =
   unM m r pure
 
-type Goto a =
-  forall r void. a -> M r void
+newtype Label a
+  = Label (forall r void. a -> M r void)
 
-label :: (Goto a -> M r a) -> M r a
+label :: (Label a -> M r a) -> M r a
 label f =
   M \r k -> do
     n <- newUnique
-    try (run r (f (\x -> liftIO (throwIO (X n x))))) >>= \case
+    try (run r (f (Label \x -> liftIO (throwIO (X n x))))) >>= \case
       Left err@(X m y)
         | n == m -> k (unsafeCoerce y)
         | otherwise -> throwIO err
       Right x -> k x
 
+goto :: Label a -> a -> M r void
+goto (Label f) x =
+  f x
+
 type Abort a =
-  (?abort :: Abort_ a)
+  (?abort :: Label a)
 
-data Abort_ a
-  = Abort_ (Goto a)
-
-stick :: Goto a -> (Abort a => b) -> b
-stick f x = let ?abort = Abort_ f in x
+stick :: Label a -> (Abort a => b) -> b
+stick g x = let ?abort = g in x
 
 abort :: Abort a => a -> M r void
 abort x =
   case ?abort of
-    Abort_ f -> f x
+    Label f -> f x
 
 data X = forall a. X Unique a
 
