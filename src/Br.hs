@@ -1,21 +1,33 @@
 module Br
   ( M,
     run,
+
+    -- ** Labels
     Label,
     label,
     goto,
+
+    -- *** Implicit labels
     Abort,
     stick,
     abort,
+    unabort,
+
+    -- ** Acquiring resources
     with,
     with_,
+
+    -- ** Catching IO exceptions
+    try,
   )
 where
 
-import Control.Exception (Exception (..), asyncExceptionFromException, asyncExceptionToException, throwIO, try)
+import Control.Exception (Exception (..), asyncExceptionFromException, asyncExceptionToException, throwIO)
+import Control.Exception qualified as Exception
 import Control.Monad qualified
 import Control.Monad.IO.Class (MonadIO (..))
 import Control.Monad.Reader (MonadReader (..))
+import Data.Functor.Contravariant
 import Data.Unique
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -54,11 +66,15 @@ run r m =
 newtype Label a
   = Label (forall r void. a -> M r void)
 
+instance Contravariant Label where
+  contramap f (Label g) =
+    Label (g . f)
+
 label :: (Label a -> M r a) -> M r a
 label f =
   M \r k -> do
     n <- newUnique
-    try (run r (f (Label \x -> liftIO (throwIO (X n x))))) >>= \case
+    Exception.try (run r (f (Label \x -> liftIO (throwIO (X n x))))) >>= \case
       Left err@(X m y)
         | n == m -> k (unsafeCoerce y)
         | otherwise -> throwIO err
@@ -71,13 +87,20 @@ goto (Label f) x =
 type Abort a =
   (?abort :: Label a)
 
+-- | \"Stick\" a label @b@, making any @abort x@ call in the given argument equivalent to @goto b x@.
 stick :: Label a -> (Abort a => b) -> b
 stick g x = let ?abort = g in x
 
+-- | Abort to the stuck label.
 abort :: Abort a => a -> M r void
 abort x =
   case ?abort of
     Label f -> f x
+
+unabort :: (Abort e => M r a) -> M r (Either e a)
+unabort action =
+  label \done ->
+    stick (contramap Left done) (Right <$> action)
 
 data X = forall a. X Unique a
 
@@ -99,3 +122,10 @@ with_ f action =
   M \r k -> do
     a <- f (run r action)
     k a
+
+try :: Exception e => M r a -> M r (Either e a)
+try (M action) =
+  M \r k ->
+    Exception.try (action r (k . Right)) >>= \case
+      Left ex -> k (Left ex)
+      Right x -> pure x
