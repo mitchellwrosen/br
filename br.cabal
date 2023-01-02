@@ -25,7 +25,7 @@ source-repository head
 library
   build-depends:
     base ^>= 4.16 || ^>= 4.17,
-    mtl ^>= 2.3,
+    mtl ^>= 2.2 || ^>= 2.3,
   default-extensions:
     BlockArguments
     DerivingStrategies
