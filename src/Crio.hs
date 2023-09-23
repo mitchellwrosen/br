@@ -31,6 +31,126 @@ import Data.Functor.Contravariant
 import Data.Unique
 import Unsafe.Coerce (unsafeCoerce)
 
+-- | A @Crio r a@ computation has implicit access to an @r@, can perform @IO@, and returns an @a@; it is like
+-- @"ReaderT-over-IO"@ as popularized by the @rio@ package.
+--
+-- Additionally, a @Crio r a@ computation supports short-circuiting a computation with a value that is tracked in the
+-- type system (unlike 'throwIO').
+--
+-- This allows one to write programs that have multiple logical exit points (which may or may not correspond to
+-- "exceptional" circumstances). The primary benefit of this style is readability. Such programs need not choose one of
+-- three bad options:
+--
+--   1. Use the @ExceptT@ monad transformer for short-circuiting syntax, and decorate the program with @ExceptT@,
+--      @runExceptT@, and @lift@s as necessary.
+--   2. Incur a syntactic indentation via a pattern match or if-then-else any time an exit point is reached.
+--   3. Throw an exception with 'throwIO', and remember to catch it where appropriate.
+--
+-- For example, consider the following program that returns the temperature in degrees Celsius. First, it consults an
+-- accurate (but flakey) weather service. If that fails, it tries a less-accurate fallback. If that fails, it returns 0.
+--
+-- Here are a couple utility helpers we'll use.
+--
+-- @
+-- onRightM :: Monad m => (b -> m a) -> m (Either a b) -> m a
+-- swapEither :: Either a b -> Either b a
+-- @
+--
+-- And here are the two temperature-fetching actions.
+--
+-- @
+-- getAccurateTemperature     :: MonadIO m => m (Either String Int)
+-- getLessAccurateTemperature :: MonadIO m => m (Either String Int)
+-- @
+--
+-- First, we'll try using @ExceptT@.
+--
+-- @
+-- whatsTheTemperature :: IO Int
+-- whatsTheTemperature =
+--   teardown do
+--     output "I'm getting the temperature."
+--     _ \<- ExceptT (swapEitherM \<\$> getAccurateTemperature)
+--     output "That didn't work, trying one more time."
+--     _ \<- ExceptT (swapEitherM \<\$> getLessAccurateTemperature)
+--     output "That didn't work either!"
+--     pure 0
+--   where
+--     teardown :: ExceptT Int IO Int -> IO Int
+--     teardown action = do
+--       temp \<- either id id \<\$> runExceptT action
+--       output "All done!"
+--       pure temp
+--
+-- @
+--
+-- Next, let's try pattern matching.
+--
+-- @
+-- whatsTheTemperature :: IO Int
+-- whatsTheTemperature = do
+--   output "I'm getting the temperature."
+--   temp \<-
+--     getAccurateTemperature >>= \\case
+--       Right temp -> pure temp
+--       Left _ -> do
+--         output "That didn't work, trying one more time."
+--         getLessAccurateTemperature >>= \\case
+--           Right temp -> pure temp
+--           Left _ -> do
+--             output "That didn't work either!"
+--             pure 0
+--   output "All done!"
+--   pure temp
+-- @
+--
+-- Next, let's try using an exception.
+--
+-- @
+-- whatsTheTemperature :: IO Int
+-- whatsTheTemperature =
+--   teardown do
+--     output "I'm getting the temperature."
+--     _ \<- getAccurateTemperature & onRightM done
+--     output "That didn't work, trying one more time."
+--     _ \<- getLessAccurateTemperature & onRightM done
+--     output "That didn't work either!"
+--     pure 0
+--   where
+--     done :: Int -> IO void
+--     done = throwIO . GotTheTemperature
+--
+--     teardown :: IO Int -> IO Int
+--     teardown action = do
+--       temp \<- catch action \\(GotTheTemperature temp) -> pure temp
+--       output "All done!"
+--       pure temp
+--
+-- newtype GotTheTemperature = GotTheTemperature Int
+--   deriving stock (Show)
+--   deriving anyclass (Exception)
+-- @
+--
+--
+-- And finally, we'll use @crio@.
+--
+-- @
+-- whatsTheTemperature :: Crio IO Int
+-- whatsTheTemperature = do
+--   temp \<-
+--     Crio.'label' \\done -> do
+--       output "I'm getting the temperature."
+--       getAccurateTemperature & onRightM (Crio.'goto' done)
+--       output "That didn't work, trying one more time."
+--       getLessAccurateTemperature & onRightM (Crio.'goto' done)
+--       output "That didn't work either!"
+--       pure 0
+--   output "All done!"
+--   pure temp
+-- @
+--
+-- As you can see, the program grows looks similar to the version that uses exceptions, but it doesn't work outside of
+-- the type system, and it's not possible to accidentally "leak" an exception that was meant to be caught.
 newtype Crio r a
   = Crio (forall x. r -> (a -> IO x) -> IO x)
   deriving stock (Functor)
