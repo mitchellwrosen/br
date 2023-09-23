@@ -2,16 +2,16 @@ cabal-version: 2.2
 
 author: Mitchell Rosen
 bug-reports: https://github.com/mitchellwrosen/br/issues
-copyright: Copyright (C) 2022 Mitchell Rosen
+copyright: Copyright (C) 2022-2023 Mitchell Rosen
 description: An application monad.
 homepage: https://github.com/mitchellwrosen/br
 license: BSD-3-Clause
 license-file: LICENSE
 maintainer: Mitchell Rosen <mitchellwrosen@gmail.com>
-name: br
+name: crio
 stability: experimental
 synopsis: An application monad
-tested-with: GHC == 9.0.2, GHC == 9.2.5, GHC == 9.4.3
+tested-with: GHC == 9.2.8, GHC == 9.4.7, GHC == 9.6.2
 version: 0.1.0
 
 extra-source-files:
@@ -48,5 +48,5 @@ library
     ghc-options:
       -Wno-missing-kind-signatures
   exposed-modules:
-    Br
+    Crio
   hs-source-dirs: src
