@@ -49,4 +49,5 @@ library
       -Wno-missing-kind-signatures
   exposed-modules:
     Crio
+    Crio2
   hs-source-dirs: src
